@@ -1,98 +1,76 @@
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
 
-uint8_t devEui[] = { 0x00, 0x00, 0xA0, 0x3B, 0x3C, 0x43, 0xCA, 0x48 };
-uint8_t appEui[] = { 0x70, 0xB3, 0xD5, 0x7E, 0x12, 0x34, 0xAB, 0xCD };
-uint8_t appKey[] = { 0x2A, 0x3F, 0x72, 0xF6, 0x0B, 0x94, 0x5B, 0x69,
-                     0x58, 0x96, 0xA0, 0x8B, 0xCB, 0xE1, 0x01, 0xE7 };
-
-uint16_t userChannelsMask[6]={ 0x00FF, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
-//uint16_t userChannelsMask[6] = { 0xFF00, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 };
+#define DEBUG Serial0
 
 
-bool loraWanAdr = true;
-uint8_t nwkSKey[16] = { 0 };
-uint8_t appSKey[16] = { 0 };
-uint32_t devAddr = 0;
-
-
-LoRaMacRegion_t loraWanRegion = LORAMAC_REGION_US915;  // o la que tu gateway usa
-DeviceClass_t loraWanClass = CLASS_A;                  // clase A para TTN
-//DeviceState_t deviceState = DEVICE_STATE_INIT;
-
-uint32_t appTxDutyCycle = 15000;
+LoRaMacRegion_t loraWanRegion = LORAMAC_REGION_AU915;
+DeviceClass_t loraWanClass = CLASS_A;
 
 bool overTheAirActivation = true;
+bool loraWanAdr = true;
+bool isTxConfirmed = false;
 
-uint8_t appPort = 2;         // Puerto de aplicación
-bool isTxConfirmed = false;  // Confirmar mensajes (ACK)
-
+uint32_t appTxDutyCycle = 10000;
+uint8_t appPort = 1; 
 uint8_t confirmedNbTrials = 4;
-static void prepareTxFrame(uint8_t port) {
-  /*appData size is LORAWAN_APP_DATA_MAX_SIZE which is defined in "commissioning.h".
-  *appDataSize max value is LORAWAN_APP_DATA_MAX_SIZE.
-  *if enabled AT, don't modify LORAWAN_APP_DATA_MAX_SIZE, it may cause system hanging or failure.
-  *if disabled AT, LORAWAN_APP_DATA_MAX_SIZE can be modified, the max value is reference to lorawan region and SF.
-  *for example, if use REGION_CN470, 
-  *the max value for different DR can be found in MaxPayloadOfDatarateCN470 refer to DataratesCN470 and BandwidthsCN470 in "RegionCN470.h".
-  */
-  appDataSize = 4;
-  appData[0] = 0x00;
-  appData[1] = 0x01;
-  appData[2] = 0x02;
-  appData[3] = 0x03;
-}
 
-//if true, next uplink will add MOTE_MAC_DEVICE_TIME_REQ
+uint32_t devAddr = 0x00000000;
+uint8_t nwkSKey[16] = {0};
+uint8_t appSKey[16] = {0};
 
+uint16_t userChannelsMask[6] = {
+  0x00FF, 0, 0, 0, 0, 0  // FSB1 canales 0-7 (902.3-903.7 MHz)
+};
+
+uint8_t devEui[] = { 0x00,0x00,0x40,0x3B,0x3C,0x43,0xCA,0x48 };
+uint8_t appEui[] = { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
+uint8_t appKey[] = {
+  0xE2,0xB2,0x9C,0x40,0x36,0x49,0x74,0x3B,
+  0x05,0xE8,0x73,0xC6,0xD5,0xBD,0xA9,0xFC
+};
 
 void setup() {
-  Serial.begin(115200);
+  DEBUG.begin(115200);
+  delay(2000);
+  DEBUG.println("HELTEC S3 START");
+
   Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
-  // Mcu.begin(HELTEC_BOARD, EXTERNAL_OSC);
 }
 
 void loop() {
   switch (deviceState) {
+
     case DEVICE_STATE_INIT:
-      {
-#if (LORAWAN_DEVEUI_AUTO)
-        LoRaWAN.generateDeveuiByChipID();
-#endif
-        LoRaWAN.init(loraWanClass, loraWanRegion);
-        //both set join DR and DR when ADR off
-        LoRaWAN.setDefaultDR(3);
-        break;
-      }
+      DEBUG.println("STATE: INIT");
+      LoRaWAN.init(loraWanClass, loraWanRegion);
+      LoRaWAN.setDefaultDR(0);
+      DEBUG.println("RSSI test...");
+      deviceState = DEVICE_STATE_JOIN;
+      break;
+
     case DEVICE_STATE_JOIN:
-      {
-        LoRaWAN.join();
-        break;
-      }
+      DEBUG.println("STATE: JOIN");
+      LoRaWAN.join();
+      break;
+
     case DEVICE_STATE_SEND:
-      {
-        prepareTxFrame(appPort);
-        LoRaWAN.send();
-        deviceState = DEVICE_STATE_CYCLE;
-        break;
-      }
+      DEBUG.println("STATE: SEND");
+      appDataSize = sprintf((char*)appData, "queso.");
+      LoRaWAN.send();
+      deviceState = DEVICE_STATE_CYCLE;
+      break;
+
     case DEVICE_STATE_CYCLE:
-      {
-        // Schedule next packet transmission
-        txDutyCycleTime = appTxDutyCycle + randr(-APP_TX_DUTYCYCLE_RND, APP_TX_DUTYCYCLE_RND);
-        LoRaWAN.cycle(txDutyCycleTime);
-        deviceState = DEVICE_STATE_SLEEP;
-        break;
-      }
+      DEBUG.println("STATE: CYCLE");
+      LoRaWAN.cycle(appTxDutyCycle);
+      deviceState = DEVICE_STATE_SLEEP;
+      break;
+
     case DEVICE_STATE_SLEEP:
-      {
-        LoRaWAN.sleep(loraWanClass);
-        break;
-      }
-    default:
-      {
-        deviceState = DEVICE_STATE_INIT;
-        break;
-      }
+      DEBUG.println("STATE: SLEEP");
+      LoRaWAN.sleep(loraWanClass);
+      break;
   }
 }
+
