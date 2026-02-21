@@ -57,7 +57,7 @@ async function iniciarBot() {
                     const ts = jsonData.ts || 'N/A';
                     data = `ID: ${id}\n📍 Lat: ${lat}\n📍 Lon: ${lon}\n🛰 Satellites: ${sats}`;
 
-                    // Calcular latencia
+                    // latency calculation
                     if (ts && ts > 0) {
                         const ts_gps_ms = ts * 1000;
                         const received_ms = new Date(payload.received_at).getTime();
@@ -78,7 +78,7 @@ async function iniciarBot() {
 📝 message: ${data}${latencia_texto}`;
 
             // Enviar mensaje a WhatsApp
-            const destinos = ['593xxxxxxxxx@s.whatsapp.net'];
+            const destinos = ['593xxxxxxxxx@s.whatsapp.net']; //replace with phone number 
             for (const numero of destinos) {
                 await sock.sendMessage(numero, { text: texto_final });
             }

@@ -1,3 +1,6 @@
 BotWhatsApp/node_modules/
 BotWhatsApp/build/
 BotWhatsApp/.env
+BotWhatsApp/auth/
+BotWhatsApp/session/
+BotWhatsApp/.baileys/
